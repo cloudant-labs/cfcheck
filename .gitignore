@@ -1,0 +1,13 @@
+.erlang.mk.*
+/cfcheck
+.eunit
+deps
+priv
+*.o
+*.beam
+*.plt
+erl_crash.dump
+ebin
+rel/cfcheck
+.concrete/DEV_MODE
+.rebar

@@ -1,0 +1,11 @@
+{application, cfcheck, [
+    {description, "Gather stats on CouchDB db and view files"},
+    {vsn, "0.0.1"},
+    {registered, [cfcheck]},
+    {applications, [
+        kernel,
+        stdlib
+    ]},
+    {env, []},
+    {modules, [cfcheck]}
+ ]}.
