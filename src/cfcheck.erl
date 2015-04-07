@@ -599,6 +599,8 @@ get_files([Path|Rest], Acc) ->
         get_files(lists:append(Rest, Ins), Acc);
     false ->
         case lists:reverse(string:tokens(Path, ".")) of
+        ["couch", "deleted"|_] ->
+            get_files(Rest, Acc);
         ["couch"|_] ->
             get_files(Rest, [{db, list_to_binary(Path)}|Acc]);
         ["view"|_] ->
