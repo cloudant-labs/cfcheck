@@ -426,6 +426,15 @@ parse_view_header(Head) when is_record(Head, mrheader) ->
         {views, Head#mrheader.view_states}
     ]),
     {ok, Info};
+parse_view_header(nil) ->
+    %% just compacted
+    Info = dict:from_list([
+        {update_seq, 0},
+        {purge_seq, 0},
+        {id_tree, nil},
+        {views, []}
+    ]),
+    {ok, Info};
 parse_view_header(Head) ->
     throw({unknown_header_format, Head}).
 
