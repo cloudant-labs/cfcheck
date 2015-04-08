@@ -1,5 +1,7 @@
 -module(cfcheck).
 
+-mode(compile).
+
 -include_lib("kernel/include/file.hrl").
 
 -export([main/1]).
@@ -40,6 +42,13 @@
     view_states
 }).
 
+-record(cs, {
+    queue = [],
+    map = [],
+    acc = [],
+    ok = 0,
+    fail = 0
+}).
 -record(db_acc, {
     files_count = 0,
     files_size = 0,
@@ -149,47 +158,71 @@ main(Path, Opts, false) ->
         end
     end.
 
-start_collector(ParentPid, Files, Opts) ->
+start_collector(PPid, Files, Opts) ->
     Self = self(),
     process_flag(trap_exit, true),
-    WrkMap = lists:foldl(fun(File, Acc) ->
+    ProcMap = lists:foldl(fun(File, Acc) ->
         Pid = spawn_link(fun() -> process_file(Self, File, Opts) end),
         [{Pid, File}|Acc]
     end, [], Files),
-    collector(ParentPid, {WrkMap, 0, 0}, []).
+    CollectorState = #cs{queue = ProcMap, map = ProcMap},
+    collector(PPid, CollectorState).
 
-collector(ParentPid, {WrkMap,_,_}, Acc) when length(Acc) =:= length(WrkMap) ->
+collector(PPid, #cs{map = Map, acc = Acc}) when length(Acc) =:= length(Map) ->
     io:format(standard_error, "~80s~n", [" "]),
-    ParentPid ! {result, Acc},
+    PPid ! {result, Acc},
     erlang:yield();
-collector(ParentPid, {WrkMap, OkCount, ErrCount}, Acc) ->
-    TotalCount = length(WrkMap),
+collector(PPid, #cs{queue = Q, map = Map, acc = Acc} = CS) ->
+    TotalCount = length(Map),
     receive
         {result, Result} ->
             NewAcc = [{Result}|Acc],
             Len = length(NewAcc),
+            OkCount = CS#cs.ok + 1,
+            ErrCount = CS#cs.fail,
             io:format(standard_error, "  ~.2f%"
                 " [ok: ~b; error: ~b; total: ~b]\r",
-                [100 * Len / TotalCount, OkCount + 1, ErrCount, TotalCount]),
-            collector(ParentPid, {WrkMap, OkCount + 1, ErrCount}, NewAcc);
+                [100 * Len / TotalCount, OkCount, ErrCount, TotalCount]),
+            collector(PPid, CS#cs{acc = NewAcc, ok = OkCount});
         {'EXIT', _, normal} ->
-            collector(ParentPid, {WrkMap, OkCount, ErrCount}, Acc);
+            collector(PPid, CS);
         {'EXIT', Pid, Err} ->
-            {ok, Result} = parse_error(lists:keyfind(Pid, 1, WrkMap), Err),
+            {ok, Result} = parse_error(lists:keyfind(Pid, 1, Map), Err),
             NewAcc = [{Result}|Acc],
             Len = length(NewAcc),
+            OkCount = CS#cs.ok,
+            ErrCount = CS#cs.fail + 1,
             io:format(standard_error, "  ~.2f%"
                 " [ok: ~b; error: ~b; total: ~b]\r",
-                [100 * Len / TotalCount, OkCount, ErrCount + 1, TotalCount]),
-            collector(ParentPid, {WrkMap, OkCount, ErrCount + 1}, NewAcc)
+                [100 * Len / TotalCount, OkCount, ErrCount, TotalCount]),
+            collector(PPid, CS#cs{acc = NewAcc, fail = ErrCount})
+    after
+        100 ->
+            Throttle = erlang:round(TotalCount / 10),
+            case length(Q) > Throttle of
+            true ->
+                {H, T} = lists:split(Throttle, Q),
+                [Pid ! proceed || {Pid,_} <- H],
+                collector(PPid, CS#cs{queue = T});
+            false ->
+                [Pid ! proceed || {Pid,_} <- Q],
+                collector(PPid, CS#cs{queue = []})
+            end
     end.
 
-process_file(CollectorPid, {view, File}, Opts) ->
-    {ok, Result} = parse_view_file(File, Opts),
-    CollectorPid ! {result, Result};
-process_file(CollectorPid, {db, File}, Opts) ->
-    {ok, Result} = parse_db_file(File, Opts),
-    CollectorPid ! {result, Result}.
+process_file(CollectorPid, FD, Opts) ->
+    receive
+        proceed ->
+            {ok, Result} = case FD of
+                {db, File} -> parse_db_file(File, Opts);
+                {view, File} -> parse_view_file(File, Opts)
+            end,
+            CollectorPid ! {result, Result};
+        _ ->
+            process_file(CollectorPid, FD, Opts)
+    after
+        infinity -> ok
+    end.
 
 process_result(Result, Opts) ->
     case proplists:get_value(details, Opts, false) of
