@@ -55,18 +55,68 @@ Output:
     "files_count": 0
   },
   "view": {
-    "tree_stats": [],
+    "tree_stats": {
+      "id_tree": {
+        "kv_nodes": {
+          "max": 7,
+          "min": 0
+        },
+        "kp_nodes": {
+          "max": 3,
+          "min": 0
+        },
+        "depth": 2
+      }
+    },
     "external_size": 8295,
     "active_size": 10692,
     "files_size": 101646,
     "files_count": 24
   },
   "db": {
-    "tree_stats": [],
+    "tree_stats": {
+      "local_tree": {
+        "kv_nodes": {
+          "max": 0,
+          "min": 0
+        },
+        "kp_nodes": {
+          "max": 0,
+          "min": 0
+        },
+        "depth": 0
+      },
+      "seq_tree": {
+        "kv_nodes": {
+          "max": 14,
+          "min": 0
+        },
+        "kp_nodes": {
+          "max": 14,
+          "min": 0
+        },
+        "depth": 2
+      },
+      "id_tree": {
+        "kv_nodes": {
+          "max": 10,
+          "min": 0
+        },
+        "kp_nodes": {
+          "max": 9,
+          "min": 0
+        },
+        "depth": 2
+      }
+    },
     "disk_version": [
       {
         "files_count": 36,
         "disk_version": 6
+      },
+      {
+        "files_count": 2,
+        "disk_version": 5
       }
     ],
     "files_count": 36,
