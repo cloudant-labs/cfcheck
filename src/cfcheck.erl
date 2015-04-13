@@ -90,6 +90,8 @@
     {regex, undefined, "regex", string,
         "Filters the files to process with a given regex"},
     {with_tree, undefined, "with_tree", boolean, "Analyzes b-trees"},
+    {with_sec_object, undefined, "with_sec_object", boolean,
+        "Read and report a security object for each shard"},
     {help, $?, "help", {boolean, false}, "Outputs help message"}
 ]).
 -define(r2l(Type, Rec), lists:zip(record_info(fields, Type),
@@ -315,7 +317,8 @@ parse_db_file(File, Opts) ->
     {ok, Fd} = file:open(File, [read, binary]),
     Pos = (FileSize div ?SIZE_BLOCK) * ?SIZE_BLOCK,
     {ok, Header} = read_header(Fd, Pos),
-    {ok, SecObj} = read_sec_object(Fd, Header#db_header.security_ptr),
+    {ok, SecObj} = read_sec_object(Fd, Header#db_header.security_ptr,
+        proplists:get_value(with_sec_object, Opts, false)),
     {ok, TreesInfo} = analyze_trees(Fd, [
         {id_tree, Header#db_header.id_tree_state},
         {seq_tree, Header#db_header.seq_tree_state},
@@ -345,8 +348,8 @@ parse_db_file(File, Opts) ->
         {doc_count, proplists:get_value(doc_count, IdTree, 0)},
         {del_doc_count, proplists:get_value(del_doc_count, IdTree, 0)},
         {doc_info_count, proplists:get_value(doc_info_count, SeqTree, 0)},
-        {purged_doc_count, as_int(Header#db_header.purged_docs)},
-        {security_object, {SecObj}}] ++ TreesInfo,
+        {purged_doc_count, as_int(Header#db_header.purged_docs)}
+    ] ++ SecObj ++ TreesInfo,
     {ok, FileInfo}.
 
 parse_view_file(File, Opts) ->
@@ -418,7 +421,6 @@ parse_view_header(Head) when is_record(Head, index_header) ->
     ]),
     {ok, Info};
 parse_view_header(Head) when is_record(Head, mrheader) ->
-    %% #mrheader.log_btree_state - is mostly nil. I don't know what it is
     Info = dict:from_list([
         {update_seq, Head#mrheader.seq},
         {purge_seq, Head#mrheader.purge_seq},
@@ -450,10 +452,13 @@ read_header(Fd, Pos) ->
         read_header(Fd, Pos - 1)
     end.
 
-read_sec_object(_, nil) ->
+read_sec_object(_, _, false) ->
     {ok, []};
-read_sec_object(Fd, Pos) ->
-    {ok, read_term(Fd, Pos)}.
+read_sec_object(_, nil, _) ->
+    {ok, []};
+read_sec_object(Fd, Pos, true) ->
+    SecObj = read_term(Fd, Pos),
+    {ok, [{security_object, {SecObj}}]}.
 
 read_tree(nil) ->
     {ok, [{size, 0}]};

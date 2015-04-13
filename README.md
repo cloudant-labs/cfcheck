@@ -26,14 +26,16 @@ Because the script depends on NIFs, `snappy` for decompressing couch files and `
 
 ```
 Usage: cfcheck [<path>] [-d <details>] [-c [<cache>]] [--regex <regex>]
-               [--with_tree <with_tree>] [-? [<help>]]
+               [--with_tree <with_tree>]
+               [--with_sec_object <with_sec_object>] [-? [<help>]]
 
-  <path>         Path to CouchDB data directory
-  -d, --details  Outputs the details for each file
-  -c, --cache    Reads the results from a cache [default: false]
-  --regex        Filters the files to process with a given regex
-  --with_tree    Analyzes b-trees
-  -?, --help     Outputs help message [default: false]
+  <path>             Path to CouchDB data directory
+  -d, --details      Outputs the details for each file
+  -c, --cache        Reads the results from a cache [default: false]
+  --regex            Filters the files to process with a given regex
+  --with_tree        Analyzes b-trees
+  --with_sec_object  Read and report a security object for each shard
+  -?, --help         Outputs help message [default: false]
 
 ```
 
@@ -82,7 +84,7 @@ Output:
 Detailed output. C_an be quite long_
 
 ```bash
-$ ./cfcheck ~/opt/deimos/ -d --with_tree | jq .
+$ ./cfcheck ~/opt/deimos/ -d --with_tree --with_sec_object | jq .
 ```
 
 Output:
