@@ -111,8 +111,8 @@
     {cache, $c, "cache", {boolean, false}, "Reads the results from a cache"},
     {regex, undefined, "regex", string,
         "Filters the files to process with a given regex"},
-    {with_tree, undefined, "with_tree", boolean, "Analyzes b-trees"},
-    {with_sec_object, undefined, "with_sec_object", boolean,
+    {with_tree, undefined, "with_tree", {boolean, false}, "Analyzes b-trees"},
+    {with_sec_object, undefined, "with_sec_object", {boolean, false},
         "Read and report a security object for each shard"},
     {help, $?, "help", {boolean, false}, "Outputs help message"}
 ]).
@@ -128,45 +128,47 @@ main(Args) ->
         {help, true} ->
             main([]);
         {help, false} ->
+            opts = ets:new(opts, [set, named_table]),
+            [ets:insert(opts, V) || V <- Opts],
             Path = proplists:get_value(path, Opts, false),
             FromCache = proplists:get_value(cache, Opts),
-            main(Path, Opts, FromCache)
+            main(Path, FromCache)
         end;
     {error, {invalid_option, O}} ->
         io:format(standard_error, "Error: Invalid parameter ~s~n", [O]),
         main([])
     end.
 
-main(false, _, _) ->
+main(false, _) ->
     io:format(standard_error,
         "Error: Missing required parameter ~s~n", ["path"]),
     main([]);
-main(_, Opts, true) ->
+main(_, true) ->
     case read_cache() of
     {ok, Result} ->
-        process_result(Result, Opts);
+        process_result(Result);
     {error, Error} ->
         io:format(standard_error, "Error: Can't read cache: ~w~n", [Error])
     end;
-main(Path, Opts, false) ->
+main(Path, false) ->
     {ok, Files0} = get_files(Path),
-    Files = case lists:keyfind(regex, 1, Opts) of
-    {regex, Re} ->
+    Files = case ets:lookup(opts, regex) of
+    [{regex, Re}] ->
         {ok, MP} = re:compile(Re),
         [{T, F} || {T, F} <- Files0, re:run(F, MP) /= nomatch];
-    false ->
+    [] ->
         Files0
     end,
     Self = self(),
     Len = length(Files),
     process_flag(trap_exit, true),
     CollectorPid = spawn_link(fun() ->
-        start_collector(Self, Files, Opts)
+        start_collector(Self, Files)
     end),
     receive
     {result, Result} ->
         ok = write_cache(Result),
-        process_result(Result, Opts);
+        process_result(Result);
     {'EXIT', CollectorPid, normal} ->
         % shouldn't happen, but async world is so out of sync
         throw(runcon);
@@ -182,11 +184,11 @@ main(Path, Opts, false) ->
         end
     end.
 
-start_collector(PPid, Files, Opts) ->
+start_collector(PPid, Files) ->
     Self = self(),
     process_flag(trap_exit, true),
     ProcMap = lists:foldl(fun(File, Acc) ->
-        Pid = spawn_link(fun() -> process_file(Self, File, Opts) end),
+        Pid = spawn_link(fun() -> process_file(Self, File) end),
         [{Pid, File}|Acc]
     end, [], Files),
     CollectorState = #cs{queue = ProcMap, map = ProcMap},
@@ -234,45 +236,54 @@ collector(PPid, #cs{queue = Q, map = Map, acc = Acc} = CS) ->
             end
     end.
 
-process_file(CollectorPid, FD, Opts) ->
+process_file(CollectorPid, FD) ->
     receive
         proceed ->
             {ok, Result} = case FD of
-                {db, File} -> parse_db_file(File, Opts);
-                {view, File} -> parse_view_file(File, Opts)
+                {db, File} -> parse_db_file(File);
+                {view, File} -> parse_view_file(File)
             end,
             CollectorPid ! {result, Result};
         _ ->
-            process_file(CollectorPid, FD, Opts)
+            process_file(CollectorPid, FD)
     after
         infinity -> ok
     end.
 
-process_result(Result, Opts) ->
-    case proplists:get_value(details, Opts, false) of
-    true ->
+process_result(Result) ->
+    case ets:lookup(opts, details) of
+    [{details, true}] ->
         io:format("~s~n", [jiffy:encode(Result)]);
-    false ->
-        {DRec, VRec, ERec, _} = lists:foldl(fun reduce_result/2,
-            {#db_acc{}, #view_acc{}, #err_acc{}, Opts}, Result),
+    _ ->
+        {DRec, VRec, ERec} = lists:foldl(fun reduce_result/2,
+            {#db_acc{}, #view_acc{}, #err_acc{}}, Result),
         DiskVersion = dict:fold(fun(K, V, Acc) ->
             [{[{disk_version, K}, {files_count, V}]}|Acc]
         end, [], DRec#db_acc.disk_version),
         Db = ?r2l(db_acc, DRec#db_acc{disk_version = DiskVersion}),
         View = ?r2l(view_acc, VRec),
         Err = ?r2l(err_acc, ERec),
-        Stats = {[{db, {Db}}, {view, {View}}, {error, {Err}}]},
+        Stats = case ets:lookup(opts, with_tree) of
+            [{with_tree, true}] ->
+                {[{db, {Db}}, {view, {View}}, {error, {Err}}]};
+            [{with_tree, false}] ->
+                {[
+                    {db, {lists:keydelete(tree_stats, 1, Db)}},
+                    {view, {lists:keydelete(tree_stats, 1, View)}},
+                    {error, {Err}}
+                ]}
+        end,
         io:format("~s~n", [jiffy:encode(Stats)])
     end.
 
-reduce_result({R}, {DbAcc, ViewAcc, ErrAcc, Opts}) ->
+reduce_result({R}, {DbAcc, ViewAcc, ErrAcc}) ->
     case lists:keyfind(file_type, 1, R) of
     {file_type, <<"db">>} ->
-        {reduce_db_result(R, DbAcc), ViewAcc, ErrAcc, Opts};
+        {reduce_db_result(R, DbAcc), ViewAcc, ErrAcc};
     {file_type, <<"view">>} ->
-        {DbAcc, reduce_view_result(R, ViewAcc), ErrAcc, Opts};
+        {DbAcc, reduce_view_result(R, ViewAcc), ErrAcc};
     {file_type, <<"error">>} ->
-        {DbAcc, ViewAcc, reduce_error_result(R, ErrAcc), Opts}
+        {DbAcc, ViewAcc, reduce_error_result(R, ErrAcc)}
     end.
 
 reduce_db_result(R, Acc) ->
@@ -284,7 +295,18 @@ reduce_db_result(R, Acc) ->
     {doc_info_count, DocInfoCount} = lists:keyfind(doc_info_count, 1, R),
     {purged_doc_count, PurgeDocCount} = lists:keyfind(purged_doc_count, 1, R),
     {disk_version, DVer} = lists:keyfind(disk_version, 1, R),
-    {TreeAcc} = Acc#db_acc.tree_stats,
+    TreeStats = case ets:lookup(opts, with_tree) of
+        [{with_tree, true}] ->
+            {TreeAcc} = Acc#db_acc.tree_stats,
+            {[
+                {id_tree, reduce_tree_result(id_tree, R, TreeAcc)},
+                {seq_tree, reduce_tree_result(seq_tree, R, TreeAcc)},
+                {local_tree, reduce_tree_result(local_tree, R, TreeAcc)}
+            ]};
+        [{with_tree, false}] ->
+            DefAcc = #db_acc{},
+            DefAcc#db_acc.tree_stats
+    end,
     #db_acc{
         files_count = Acc#db_acc.files_count + 1,
         files_size = Acc#db_acc.files_size + FileSize,
@@ -295,26 +317,27 @@ reduce_db_result(R, Acc) ->
         doc_info_count = Acc#db_acc.doc_info_count + DocInfoCount,
         purged_doc_count = Acc#db_acc.purged_doc_count + PurgeDocCount,
         disk_version = dict:update_counter(DVer, 1, Acc#db_acc.disk_version),
-        tree_stats = {[
-            {id_tree, reduce_tree_result(id_tree, R, TreeAcc)},
-            {seq_tree, reduce_tree_result(seq_tree, R, TreeAcc)},
-            {local_tree, reduce_tree_result(local_tree, R, TreeAcc)}
-        ]}
+        tree_stats = TreeStats
     }.
 
 reduce_view_result(R, Acc) ->
     {file_size, FileSize} = lists:keyfind(file_size, 1, R),
     {active_size, ActiveSize} = lists:keyfind(active_size, 1, R),
     {external_size, ExternalSize} = lists:keyfind(external_size, 1, R),
-    {TreeAcc} = Acc#view_acc.tree_stats,
+    TreeStats = case ets:lookup(opts, with_tree) of
+        [{with_tree, true}] ->
+            {TreeAcc} = Acc#view_acc.tree_stats,
+            {[{id_tree, reduce_tree_result(id_tree, R, TreeAcc)}]};
+        [{with_tree, false}] ->
+            DefAcc = #view_acc{},
+            DefAcc#view_acc.tree_stats
+    end,
     #view_acc{
         files_count = Acc#view_acc.files_count + 1,
         files_size = Acc#view_acc.files_size + FileSize,
         active_size = Acc#view_acc.active_size + ActiveSize,
         external_size = Acc#view_acc.external_size + ExternalSize,
-        tree_stats = {[
-            {id_tree, reduce_tree_result(id_tree, R, TreeAcc)}
-        ]}
+        tree_stats = TreeStats
     }.
 
 reduce_error_result(R, Acc) ->
@@ -373,18 +396,27 @@ write_cache(Result) ->
     Json = jiffy:encode(Result),
     file:write_file(File, Json).
 
-parse_db_file(File, Opts) ->
+parse_db_file(File) ->
     FileSize = filelib:file_size(File),
     {ok, Fd} = file:open(File, [read, binary]),
     Pos = (FileSize div ?SIZE_BLOCK) * ?SIZE_BLOCK,
     {ok, Header} = read_header(Fd, Pos),
-    {ok, SecObj} = read_sec_object(Fd, Header#db_header.security_ptr,
-        proplists:get_value(with_sec_object, Opts, false)),
-    {ok, TreesInfo} = analyze_trees(Fd, [
-        {id_tree, Header#db_header.id_tree_state},
-        {seq_tree, Header#db_header.seq_tree_state},
-        {local_tree, Header#db_header.local_tree_state}
-    ], proplists:get_value(with_tree, Opts, false)),
+    {ok, SecObj} = case ets:lookup(opts, with_sec_object) of
+        [{with_sec_object, true}] ->
+            read_sec_object(Fd, Header#db_header.security_ptr);
+        _ ->
+            {ok, []}
+    end,
+    {ok, TreesInfo} = case ets:lookup(opts, with_tree) of
+        [{with_tree, true}] ->
+            analyze_trees(Fd, [
+                {id_tree, Header#db_header.id_tree_state},
+                {seq_tree, Header#db_header.seq_tree_state},
+                {local_tree, Header#db_header.local_tree_state}
+            ]);
+        [{with_tree, false}] ->
+            {ok, []}
+    end,
     file:close(Fd),
     {ok, IdTree} = read_tree(Header#db_header.id_tree_state),
     {ok, SeqTree} = read_tree(Header#db_header.seq_tree_state),
@@ -413,15 +445,18 @@ parse_db_file(File, Opts) ->
     ] ++ SecObj ++ TreesInfo,
     {ok, FileInfo}.
 
-parse_view_file(File, Opts) ->
+parse_view_file(File) ->
     FileSize = filelib:file_size(File),
     {ok, Fd} = file:open(File, [read, binary]),
     Pos = (FileSize div ?SIZE_BLOCK) * ?SIZE_BLOCK,
     {ok, {Sig, HeaderRec}} = read_header(Fd, Pos),
     {ok, Header} = parse_view_header(HeaderRec),
-    {ok, TreesInfo} = analyze_trees(Fd, [
-        {id_tree, dict:fetch(id_tree, Header)}
-    ], proplists:get_value(with_tree, Opts, false)),
+    {ok, TreesInfo} = case ets:lookup(opts, with_tree) of
+        [{with_tree, true}] ->
+            analyze_trees(Fd, [{id_tree, dict:fetch(id_tree, Header)}]);
+        [{with_tree, false}] ->
+            {ok, []}
+    end,
     file:close(Fd),
     {ok, IdTree} = read_tree(dict:fetch(id_tree, Header)),
     {size, IdTreeSize} = lists:keyfind(size, 1, IdTree),
@@ -513,11 +548,9 @@ read_header(Fd, Pos) ->
         read_header(Fd, Pos - 1)
     end.
 
-read_sec_object(_, _, false) ->
+read_sec_object(_, nil) ->
     {ok, []};
-read_sec_object(_, nil, _) ->
-    {ok, []};
-read_sec_object(Fd, Pos, true) ->
+read_sec_object(Fd, Pos) ->
     SecObj = read_term(Fd, Pos),
     {ok, [{security_object, {SecObj}}]}.
 
@@ -538,9 +571,7 @@ read_tree({_Pos, Reductions, Size}) when is_integer(Reductions) ->
 read_tree({_Pos, [], Size}) ->
     {ok, [{size, Size}]}.
 
-analyze_trees(_, _, false) ->
-    {ok, []};
-analyze_trees(Fd, Trees, true) ->
+analyze_trees(Fd, Trees) ->
     Info = lists:map(fun({Key, Tree}) ->
         {ok, Info} = analyze_tree(Fd, Tree),
         {Key, {Info}}
