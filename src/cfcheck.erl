@@ -6,10 +6,6 @@
 
 -export([main/1]).
 
--define(LOG(Msg), io:format(standard_error, "~b: " ++ Msg ++ "~n", [?LINE])).
--define(LOG(Fmt, Args), io:format(standard_error,"~b: " ++ Fmt ++ "~n",
-    [?LINE] ++ Args)).
-
 -define(SIZE_BLOCK, 4096).
 -define(SNAPPY_PREFIX, 1).
 -define(TERM_PREFIX, 131).
@@ -47,7 +43,8 @@
     map = [],
     acc = [],
     ok = 0,
-    fail = 0
+    fail = 0,
+    pb
 }).
 -record(db_acc, {
     files_count = 0,
@@ -107,14 +104,16 @@
 -define(TIMEOUT, 30000).
 -define(OPTS, [
     {path, undefined, undefined, string, "Path to CouchDB data directory"},
-    {details, $d, "details", boolean, "Outputs the details for each file"},
-    {cache, $c, "cache", {boolean, false}, "Reads the results from a cache"},
+    {details, $d, "details", boolean, "Output the details for each file"},
+    {cache, $c, "cache", {boolean, false}, "Read the results from a cache"},
     {regex, undefined, "regex", string,
-        "Filters the files to process with a given regex"},
-    {with_tree, undefined, "with_tree", {boolean, false}, "Analyzes b-trees"},
+        "Filter-in the files to parse with a given regex"},
+    {with_tree, undefined, "with_tree", {boolean, false}, "Analyze b-trees"},
     {with_sec_object, undefined, "with_sec_object", {boolean, false},
-        "Read and report a security object for each shard"},
-    {help, $?, "help", {boolean, false}, "Outputs help message"}
+        "Read and report security object from each shard"},
+    {quiet, $q, "quiet", {boolean, false}, "Output nothing"},
+    {verbose, $v, "verbose", {boolean, false}, "Verbose output"},
+    {help, $?, "help", {boolean, false}, "Print help message"}
 ]).
 -define(r2l(Type, Rec), lists:zip(record_info(fields, Type),
     tl(tuple_to_list(Rec)))).
@@ -135,38 +134,40 @@ main(Args) ->
             main(Path, FromCache)
         end;
     {error, {invalid_option, O}} ->
-        io:format(standard_error, "Error: Invalid parameter ~s~n", [O]),
-        main([])
+        stderr("Error: Invalid parameter ~s", [O]),
+        getopt:usage(?OPTS, "cfcheck")
     end.
 
 main(false, _) ->
-    io:format(standard_error,
-        "Error: Missing required parameter ~s~n", ["path"]),
-    main([]);
+    stderr("Error: Missing required parameter 'path'"),
+    getopt:usage(?OPTS, "cfcheck");
 main(_, true) ->
     case read_cache() of
     {ok, Result} ->
         process_result(Result);
     {error, Error} ->
-        io:format(standard_error, "Error: Can't read cache: ~w~n", [Error])
+        stderr("Error: Can't read cache: ~w", [Error])
     end;
 main(Path, false) ->
     {ok, Files0} = get_files(Path),
+    debug("Found ~b files at ~s", [length(Files0), Path]),
     Files = case ets:lookup(opts, regex) of
-    [{regex, Re}] ->
-        {ok, MP} = re:compile(Re),
-        [{T, F} || {T, F} <- Files0, re:run(F, MP) /= nomatch];
-    [] ->
-        Files0
-    end,
+        [{regex, Re}] ->
+            {ok, MP} = re:compile(Re),
+            [{T, F} || {T, F} <- Files0, re:run(F, MP) /= nomatch];
+        [] ->
+            Files0
+        end,
     Self = self(),
     Len = length(Files),
+    debug("Kept ~b files after regex filter", [Len]),
     process_flag(trap_exit, true),
     CollectorPid = spawn_link(fun() ->
         start_collector(Self, Files)
     end),
     receive
     {result, Result} ->
+        clear_progress_bar(),
         ok = write_cache(Result),
         process_result(Result);
     {'EXIT', CollectorPid, normal} ->
@@ -177,8 +178,7 @@ main(Path, false) ->
     after Len * ?TIMEOUT ->
         case Len of
         0 ->
-            io:format(standard_error,
-                "Error: No db or view files found at ~s~n", [Path]);
+            stderr("Error: No db or view files found at ~s", [Path]);
         _ ->
             throw(timeout)
         end
@@ -191,14 +191,14 @@ start_collector(PPid, Files) ->
         Pid = spawn_link(fun() -> process_file(Self, File) end),
         [{Pid, File}|Acc]
     end, [], Files),
-    CollectorState = #cs{queue = ProcMap, map = ProcMap},
+    ProgressBar = build_progress_bar(),
+    CollectorState = #cs{queue = ProcMap, map = ProcMap, pb = ProgressBar},
     collector(PPid, CollectorState).
 
 collector(PPid, #cs{map = Map, acc = Acc}) when length(Acc) =:= length(Map) ->
-    io:format(standard_error, "~80s~n", [" "]),
     PPid ! {result, Acc},
     erlang:yield();
-collector(PPid, #cs{queue = Q, map = Map, acc = Acc} = CS) ->
+collector(PPid, #cs{queue = Q, map = Map, acc = Acc, pb = PB} = CS) ->
     TotalCount = length(Map),
     receive
         {result, Result} ->
@@ -206,9 +206,7 @@ collector(PPid, #cs{queue = Q, map = Map, acc = Acc} = CS) ->
             Len = length(NewAcc),
             OkCount = CS#cs.ok + 1,
             ErrCount = CS#cs.fail,
-            io:format(standard_error, "  ~.2f%"
-                " [ok: ~b; error: ~b; total: ~b]\r",
-                [100 * Len / TotalCount, OkCount, ErrCount, TotalCount]),
+            PB(Len, OkCount, ErrCount, TotalCount),
             collector(PPid, CS#cs{acc = NewAcc, ok = OkCount});
         {'EXIT', _, normal} ->
             collector(PPid, CS);
@@ -218,9 +216,7 @@ collector(PPid, #cs{queue = Q, map = Map, acc = Acc} = CS) ->
             Len = length(NewAcc),
             OkCount = CS#cs.ok,
             ErrCount = CS#cs.fail + 1,
-            io:format(standard_error, "  ~.2f%"
-                " [ok: ~b; error: ~b; total: ~b]\r",
-                [100 * Len / TotalCount, OkCount, ErrCount, TotalCount]),
+            PB(Len, OkCount, ErrCount, TotalCount),
             collector(PPid, CS#cs{acc = NewAcc, fail = ErrCount})
     after
         100 ->
@@ -257,6 +253,10 @@ process_result(Result) ->
     _ ->
         {DRec, VRec, ERec} = lists:foldl(fun reduce_result/2,
             {#db_acc{}, #view_acc{}, #err_acc{}}, Result),
+        debug("~b DB files; ~b view files; ~b errors",
+            [DRec#db_acc.files_count,
+            VRec#view_acc.files_count,
+            ERec#err_acc.files_count]),
         DiskVersion = dict:fold(fun(K, V, Acc) ->
             [{[{disk_version, K}, {files_count, V}]}|Acc]
         end, [], DRec#db_acc.disk_version),
@@ -265,7 +265,11 @@ process_result(Result) ->
         Err = ?r2l(err_acc, ERec),
         Stats = case ets:lookup(opts, with_tree) of
             [{with_tree, true}] ->
-                {[{db, {Db}}, {view, {View}}, {error, {Err}}]};
+                {[
+                    {db, {Db}},
+                    {view, {View}},
+                    {error, {Err}}
+                ]};
             [{with_tree, false}] ->
                 {[
                     {db, {lists:keydelete(tree_stats, 1, Db)}},
@@ -747,4 +751,34 @@ get_files([Path|Rest], Acc) ->
         _ ->
             get_files(Rest, Acc)
         end
+    end.
+
+stderr(Msg) ->
+    stderr(Msg, []).
+
+stderr(Fmt, Args) ->
+    io:format(standard_error, Fmt ++ "~n", Args).
+
+debug(Fmt, Args) ->
+    case ets:info(opts, size) /= undefined andalso ets:lookup(opts, verbose) of
+    [{verbose, true}] -> stderr(" * " ++ Fmt, Args);
+    _ -> ok
+    end.
+
+build_progress_bar() ->
+    case ets:lookup(opts, quiet) of
+    [{quiet, true}] ->
+        fun(_,_,_,_) -> ok end;
+    [{quiet, false}] ->
+        fun(Current, OkCount, ErrCount, TotalCount) ->
+            io:format(standard_error,
+                "  ~.2f% [ok: ~b; error: ~b; total: ~b]\r",
+                [100 * Current / TotalCount, OkCount, ErrCount, TotalCount])
+        end
+    end.
+
+clear_progress_bar() ->
+    case ets:lookup(opts, quiet) of
+    [{quiet, true}] -> ok;
+    [{quiet, false}] -> io:format(standard_error, "~80s\r", [" "])
     end.

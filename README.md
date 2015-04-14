@@ -26,16 +26,20 @@ Because the script depends on NIFs, `snappy` for decompressing couch files and `
 
 ```
 Usage: cfcheck [<path>] [-d <details>] [-c [<cache>]] [--regex <regex>]
-               [--with_tree <with_tree>]
-               [--with_sec_object <with_sec_object>] [-? [<help>]]
+               [--with_tree [<with_tree>]]
+               [--with_sec_object [<with_sec_object>]] [-q [<quiet>]]
+               [-v [<verbose>]] [-? [<help>]]
 
   <path>             Path to CouchDB data directory
-  -d, --details      Outputs the details for each file
-  -c, --cache        Reads the results from a cache [default: false]
-  --regex            Filters the files to process with a given regex
-  --with_tree        Analyzes b-trees
-  --with_sec_object  Read and report a security object for each shard
-  -?, --help         Outputs help message [default: false]
+  -d, --details      Output the details for each file
+  -c, --cache        Read the results from a cache [default: false]
+  --regex            Filter-in the files to parse with a given regex
+  --with_tree        Analyze b-trees [default: false]
+  --with_sec_object  Read and report security object from each shard
+                     [default: false]
+  -q, --quiet        Output nothing [default: false]
+  -v, --verbose      Verbose output [default: false]
+  -?, --help         Print help message [default: false]
 
 ```
 
