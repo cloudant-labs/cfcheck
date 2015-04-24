@@ -192,6 +192,7 @@ start_collector(PPid, Files) ->
         [{Pid, File}|Acc]
     end, [], Files),
     ProgressBar = build_progress_bar(),
+    ProgressBar(0, 0, 0, length(ProcMap)),
     CollectorState = #cs{queue = ProcMap, map = ProcMap, pb = ProgressBar},
     collector(PPid, CollectorState).
 
@@ -221,7 +222,7 @@ collector(PPid, #cs{queue = Q, map = Map, acc = Acc, pb = PB} = CS) ->
     after
         100 ->
             Throttle = erlang:round(TotalCount / 10),
-            case length(Q) > Throttle of
+            case Throttle > 0 andalso length(Q) > Throttle of
             true ->
                 {H, T} = lists:split(Throttle, Q),
                 [Pid ! proceed || {Pid,_} <- H],
