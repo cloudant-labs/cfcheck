@@ -55,6 +55,7 @@
     del_doc_count = 0,
     doc_info_count = 0,
     purged_doc_count = 0,
+    conflicts = 0,
     disk_version = dict:new(),
     tree_stats = {[
         {id_tree, {[
@@ -108,6 +109,7 @@
     {cache, $c, "cache", {boolean, false}, "Read the results from a cache"},
     {regex, undefined, "regex", string,
         "Filter-in the files to parse with a given regex"},
+    {conflicts, undefined, "conflicts", {boolean, false}, "Count conflicts"},
     {with_tree, undefined, "with_tree", {boolean, false}, "Analyze b-trees"},
     {with_sec_object, undefined, "with_sec_object", {boolean, false},
         "Read and report security object from each shard"},
@@ -262,18 +264,22 @@ process_result(Result) ->
             [{[{disk_version, K}, {files_count, V}]}|Acc]
         end, [], DRec#db_acc.disk_version),
         Db = ?r2l(db_acc, DRec#db_acc{disk_version = DiskVersion}),
+        Db2 = case ets:lookup(opts, conflicts) of
+            [{conflicts, true}] -> Db;
+            [{conflicts, false}] -> lists:keydelete(conflicts, 1, Db)
+        end,
         View = ?r2l(view_acc, VRec),
         Err = ?r2l(err_acc, ERec),
         Stats = case ets:lookup(opts, with_tree) of
             [{with_tree, true}] ->
                 {[
-                    {db, {Db}},
+                    {db, {Db2}},
                     {view, {View}},
                     {error, {Err}}
                 ]};
             [{with_tree, false}] ->
                 {[
-                    {db, {lists:keydelete(tree_stats, 1, Db)}},
+                    {db, {lists:keydelete(tree_stats, 1, Db2)}},
                     {view, {lists:keydelete(tree_stats, 1, View)}},
                     {error, {Err}}
                 ]}
@@ -299,6 +305,7 @@ reduce_db_result(R, Acc) ->
     {del_doc_count, DelDocCount} = lists:keyfind(del_doc_count, 1, R),
     {doc_info_count, DocInfoCount} = lists:keyfind(doc_info_count, 1, R),
     {purged_doc_count, PurgeDocCount} = lists:keyfind(purged_doc_count, 1, R),
+    {conflicts, Conflicts} = lists:keyfind(conflicts, 1, R),
     {disk_version, DVer} = lists:keyfind(disk_version, 1, R),
     TreeStats = case ets:lookup(opts, with_tree) of
         [{with_tree, true}] ->
@@ -321,6 +328,7 @@ reduce_db_result(R, Acc) ->
         del_doc_count = Acc#db_acc.del_doc_count + DelDocCount,
         doc_info_count = Acc#db_acc.doc_info_count + DocInfoCount,
         purged_doc_count = Acc#db_acc.purged_doc_count + PurgeDocCount,
+        conflicts = Acc#db_acc.conflicts + Conflicts,
         disk_version = dict:update_counter(DVer, 1, Acc#db_acc.disk_version),
         tree_stats = TreeStats
     }.
@@ -422,6 +430,12 @@ parse_db_file(File) ->
         [{with_tree, false}] ->
             {ok, []}
     end,
+    {ok, Conflicts} = case ets:lookup(opts, conflicts) of
+        [{conflicts, true}] ->
+            count_conflicts(Fd, Header#db_header.id_tree_state);
+        [{conflicts, false}] ->
+            {ok, 0}
+    end,
     file:close(Fd),
     {ok, IdTree} = read_tree(Header#db_header.id_tree_state),
     {ok, SeqTree} = read_tree(Header#db_header.seq_tree_state),
@@ -446,7 +460,8 @@ parse_db_file(File) ->
         {doc_count, proplists:get_value(doc_count, IdTree, 0)},
         {del_doc_count, proplists:get_value(del_doc_count, IdTree, 0)},
         {doc_info_count, proplists:get_value(doc_info_count, SeqTree, 0)},
-        {purged_doc_count, as_int(Header#db_header.purged_docs)}
+        {purged_doc_count, as_int(Header#db_header.purged_docs)},
+        {conflicts, Conflicts}
     ] ++ SecObj ++ TreesInfo,
     {ok, FileInfo}.
 
@@ -630,6 +645,26 @@ convert_tree_acc(Acc) ->
             {max, Acc#tree_acc.kv_nodes_max}
         ]}}
     ].
+
+count_conflicts(_, nil) ->
+    {ok, 0};
+count_conflicts(Fd, {Pos, _, _}) ->
+    Count = count_conflicts(Fd, read_term(Fd, Pos), 0),
+    {ok, Count}.
+
+count_conflicts(Fd, {kp_node, Nodes}, Acc) ->
+    Fold = fun({_,{P,_,_}}, A) ->
+        count_conflicts(Fd, read_term(Fd, P), A)
+    end,
+    lists:foldl(Fold, Acc, Nodes);
+count_conflicts(_, {kv_node, Nodes}, Acc) ->
+    Fold = fun
+        ({_Key, {_, _, _, Revs}}, A) ->
+            A + length(Revs) - 1;
+        (_, A) ->
+            A
+    end,
+    lists:foldl(Fold, Acc, Nodes).
 
 %% refactor me
 

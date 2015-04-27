@@ -26,7 +26,7 @@ Because the script depends on NIFs, `snappy` for decompressing couch files and `
 
 ```
 Usage: cfcheck [<path>] [-d <details>] [-c [<cache>]] [--regex <regex>]
-               [--with_tree [<with_tree>]]
+               [--conflicts [<conflicts>]] [--with_tree [<with_tree>]]
                [--with_sec_object [<with_sec_object>]] [-q [<quiet>]]
                [-v [<verbose>]] [-? [<help>]]
 
@@ -34,6 +34,7 @@ Usage: cfcheck [<path>] [-d <details>] [-c [<cache>]] [--regex <regex>]
   -d, --details      Output the details for each file
   -c, --cache        Read the results from a cache [default: false]
   --regex            Filter-in the files to parse with a given regex
+  --conflicts        Count conflicts [default: false]
   --with_tree        Analyze b-trees [default: false]
   --with_sec_object  Read and report security object from each shard
                      [default: false]
@@ -48,7 +49,7 @@ Usage: cfcheck [<path>] [-d <details>] [-c [<cache>]] [--regex <regex>]
 Summary output:
 
 ```bash
-$ cfcheck ~/opt/deimos/ | jq .
+$ cfcheck ~/opt/deimos/ --with_tree --conflicts | jq .
 ```
 
 Output:
@@ -123,6 +124,7 @@ Output:
         "disk_version": 5
       }
     ],
+    "conflicts": 76,
     "files_count": 36,
     "files_size": 4245909,
     "active_size": 191692,
@@ -135,10 +137,10 @@ Output:
 }
 ```
 
-Detailed output. C_an be quite long_
+Detailed output. _It can be quite long_
 
 ```bash
-$ ./cfcheck ~/opt/deimos/ -d --with_tree --with_sec_object | jq .
+$ ./cfcheck ~/opt/deimos/ -d --with_tree --with_sec_object --conflicts | jq .
 ```
 
 Output:
@@ -185,6 +187,7 @@ Output:
     "del_doc_count": 0,
     "doc_info_count": 0,
     "purged_doc_count": 0,
+    "conflicts": 0,
     "security_object": {
       "members": {
         "roles": [
