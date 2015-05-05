@@ -25,7 +25,8 @@ Because the script depends on NIFs, `snappy` for decompressing couch files and `
 ## Usage
 
 ```
-Usage: cfcheck [<path>] [-d <details>] [-c [<cache>]] [--regex <regex>]
+Usage: cfcheck [<path>] [-d <details>] [-c [<cache>]]
+               [--cache_file <cache_file>] [--regex <regex>]
                [--conflicts [<conflicts>]] [--with_tree [<with_tree>]]
                [--with_sec_object [<with_sec_object>]] [-q [<quiet>]]
                [-v [<verbose>]] [-? [<help>]]
@@ -33,6 +34,7 @@ Usage: cfcheck [<path>] [-d <details>] [-c [<cache>]] [--regex <regex>]
   <path>             Path to CouchDB data directory
   -d, --details      Output the details for each file
   -c, --cache        Read the results from a cache [default: false]
+  --cache_file       Path to the cache file
   --regex            Filter-in the files to parse with a given regex
   --conflicts        Count conflicts [default: false]
   --with_tree        Analyze b-trees [default: false]
@@ -238,6 +240,12 @@ Output:
   ...
 ]
 ```
+
+## Caching
+
+The script always caches the results of the run in a plain json file. This is done to allow a quick look at the details in case there are something suspicious in the summary.
+
+By default the cache file stored at `/tmp/cfcheck.[$USERNAME].json`. The file suffixed with the user name to avoid permissions clash in case the script ran on the same host by different users. The path to the cache file could be overriden with `--cache_file` option.
 
 ## License
 

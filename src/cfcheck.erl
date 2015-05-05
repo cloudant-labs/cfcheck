@@ -107,6 +107,7 @@
     {path, undefined, undefined, string, "Path to CouchDB data directory"},
     {details, $d, "details", boolean, "Output the details for each file"},
     {cache, $c, "cache", {boolean, false}, "Read the results from a cache"},
+    {cache_file, undefined, "cache_file", string, "Path to the cache file"},
     {regex, undefined, "regex", string,
         "Filter-in the files to parse with a given regex"},
     {conflicts, undefined, "conflicts", {boolean, false}, "Count conflicts"},
@@ -394,7 +395,7 @@ reduce_tree_result(Tree, R, Acc) ->
     ]}.
 
 read_cache() ->
-    File = "/tmp/cfcheck.json",    
+    {ok, File} = get_cache_file(),
     case file:read_file_info(File) of
     {ok, _} ->
         {ok, Bin} = file:read_file(File),
@@ -405,9 +406,18 @@ read_cache() ->
     end.
 
 write_cache(Result) ->
-    File = "/tmp/cfcheck.json",
+    {ok, File} = get_cache_file(),
     Json = jiffy:encode(Result),
     file:write_file(File, Json).
+
+get_cache_file() ->
+    case ets:lookup(opts, cache_file) of
+    [] ->
+        User = os:getenv("USER"),
+        {ok, "/tmp/cfcheck." ++ User ++ ".json"};
+    [{cache_file, File}] ->
+        {ok, File}
+    end.
 
 parse_db_file(File) ->
     FileSize = filelib:file_size(File),
