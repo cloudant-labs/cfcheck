@@ -125,20 +125,20 @@ main([]) ->
     getopt:usage(?OPTS, "cfcheck");
 main(Args) ->
     case getopt:parse(?OPTS, Args) of
-    {ok, {Opts, _}} ->
-        case lists:keyfind(help, 1, Opts) of
-        {help, true} ->
-            main([]);
-        {help, false} ->
-            opts = ets:new(opts, [set, named_table]),
-            [ets:insert(opts, V) || V <- Opts],
-            Path = proplists:get_value(path, Opts, false),
-            FromCache = proplists:get_value(cache, Opts),
-            main(Path, FromCache)
-        end;
-    {error, {invalid_option, O}} ->
-        stderr("Error: Invalid parameter ~s", [O]),
-        getopt:usage(?OPTS, "cfcheck")
+        {ok, {Opts, _}} ->
+            case lists:keyfind(help, 1, Opts) of
+                {help, true} ->
+                    main([]);
+                {help, false} ->
+                    opts = ets:new(opts, [set, named_table]),
+                    [ets:insert(opts, V) || V <- Opts],
+                    Path = proplists:get_value(path, Opts, false),
+                    FromCache = proplists:get_value(cache, Opts),
+                    main(Path, FromCache)
+            end;
+        {error, {invalid_option, O}} ->
+            stderr("Error: Invalid parameter ~s", [O]),
+            getopt:usage(?OPTS, "cfcheck")
     end.
 
 main(false, _) ->
@@ -146,10 +146,10 @@ main(false, _) ->
     getopt:usage(?OPTS, "cfcheck");
 main(_, true) ->
     case read_cache() of
-    {ok, Result} ->
-        process_result(Result);
-    {error, Error} ->
-        stderr("Error: Can't read cache: ~w", [Error])
+        {ok, Result} ->
+            process_result(Result);
+        {error, Error} ->
+            stderr("Error: Can't read cache: ~w", [Error])
     end;
 main(Path, false) ->
     {ok, Files0} = get_files(Path),
@@ -180,10 +180,10 @@ main(Path, false) ->
         throw(Error)
     after Len * ?TIMEOUT ->
         case Len of
-        0 ->
-            stderr("Error: No db or view files found at ~s", [Path]);
-        _ ->
-            throw(timeout)
+            0 ->
+                stderr("Error: No db or view files found at ~s", [Path]);
+            _ ->
+                throw(timeout)
         end
     end.
 
@@ -226,13 +226,13 @@ collector(PPid, #cs{queue = Q, map = Map, acc = Acc, pb = PB} = CS) ->
         100 ->
             Throttle = erlang:round(TotalCount / 10),
             case Throttle > 0 andalso length(Q) > Throttle of
-            true ->
-                {H, T} = lists:split(Throttle, Q),
-                [Pid ! proceed || {Pid,_} <- H],
-                collector(PPid, CS#cs{queue = T});
-            false ->
-                [Pid ! proceed || {Pid,_} <- Q],
-                collector(PPid, CS#cs{queue = []})
+                true ->
+                    {H, T} = lists:split(Throttle, Q),
+                    [Pid ! proceed || {Pid,_} <- H],
+                    collector(PPid, CS#cs{queue = T});
+                false ->
+                    [Pid ! proceed || {Pid,_} <- Q],
+                    collector(PPid, CS#cs{queue = []})
             end
     end.
 
@@ -252,50 +252,50 @@ process_file(CollectorPid, FD) ->
 
 process_result(Result) ->
     case ets:lookup(opts, details) of
-    [{details, true}] ->
-        io:format("~s~n", [jiffy:encode(Result)]);
-    _ ->
-        {DRec, VRec, ERec} = lists:foldl(fun reduce_result/2,
-            {#db_acc{}, #view_acc{}, #err_acc{}}, Result),
-        debug("~b DB files; ~b view files; ~b errors",
-            [DRec#db_acc.files_count,
-            VRec#view_acc.files_count,
-            ERec#err_acc.files_count]),
-        DiskVersion = dict:fold(fun(K, V, Acc) ->
-            [{[{disk_version, K}, {files_count, V}]}|Acc]
-        end, [], DRec#db_acc.disk_version),
-        Db = ?r2l(db_acc, DRec#db_acc{disk_version = DiskVersion}),
-        Db2 = case ets:lookup(opts, conflicts) of
-            [{conflicts, true}] -> Db;
-            [{conflicts, false}] -> lists:keydelete(conflicts, 1, Db)
-        end,
-        View = ?r2l(view_acc, VRec),
-        Err = ?r2l(err_acc, ERec),
-        Stats = case ets:lookup(opts, with_tree) of
-            [{with_tree, true}] ->
-                {[
-                    {db, {Db2}},
-                    {view, {View}},
-                    {error, {Err}}
-                ]};
-            [{with_tree, false}] ->
-                {[
-                    {db, {lists:keydelete(tree_stats, 1, Db2)}},
-                    {view, {lists:keydelete(tree_stats, 1, View)}},
-                    {error, {Err}}
-                ]}
-        end,
-        io:format("~s~n", [jiffy:encode(Stats)])
+        [{details, true}] ->
+            io:format("~s~n", [jiffy:encode(Result)]);
+        _ ->
+            {DRec, VRec, ERec} = lists:foldl(fun reduce_result/2,
+                {#db_acc{}, #view_acc{}, #err_acc{}}, Result),
+            debug("~b DB files; ~b view files; ~b errors",
+                [DRec#db_acc.files_count,
+                VRec#view_acc.files_count,
+                ERec#err_acc.files_count]),
+            DiskVersion = dict:fold(fun(K, V, Acc) ->
+                [{[{disk_version, K}, {files_count, V}]}|Acc]
+            end, [], DRec#db_acc.disk_version),
+            Db = ?r2l(db_acc, DRec#db_acc{disk_version = DiskVersion}),
+            Db2 = case ets:lookup(opts, conflicts) of
+                [{conflicts, true}] -> Db;
+                [{conflicts, false}] -> lists:keydelete(conflicts, 1, Db)
+            end,
+            View = ?r2l(view_acc, VRec),
+            Err = ?r2l(err_acc, ERec),
+            Stats = case ets:lookup(opts, with_tree) of
+                [{with_tree, true}] ->
+                    {[
+                        {db, {Db2}},
+                        {view, {View}},
+                        {error, {Err}}
+                    ]};
+                [{with_tree, false}] ->
+                    {[
+                        {db, {lists:keydelete(tree_stats, 1, Db2)}},
+                        {view, {lists:keydelete(tree_stats, 1, View)}},
+                        {error, {Err}}
+                    ]}
+            end,
+            io:format("~s~n", [jiffy:encode(Stats)])
     end.
 
 reduce_result({R}, {DbAcc, ViewAcc, ErrAcc}) ->
     case lists:keyfind(file_type, 1, R) of
-    {file_type, <<"db">>} ->
-        {reduce_db_result(R, DbAcc), ViewAcc, ErrAcc};
-    {file_type, <<"view">>} ->
-        {DbAcc, reduce_view_result(R, ViewAcc), ErrAcc};
-    {file_type, <<"error">>} ->
-        {DbAcc, ViewAcc, reduce_error_result(R, ErrAcc)}
+        {file_type, <<"db">>} ->
+            {reduce_db_result(R, DbAcc), ViewAcc, ErrAcc};
+        {file_type, <<"view">>} ->
+            {DbAcc, reduce_view_result(R, ViewAcc), ErrAcc};
+        {file_type, <<"error">>} ->
+            {DbAcc, ViewAcc, reduce_error_result(R, ErrAcc)}
     end.
 
 reduce_db_result(R, Acc) ->
@@ -356,13 +356,13 @@ reduce_view_result(R, Acc) ->
 
 reduce_error_result(R, Acc) ->
     case lists:keyfind(file_size, 1, R) of
-    {file_size, FileSize} ->
-        #err_acc{
-            files_count = Acc#err_acc.files_count + 1,
-            files_size = Acc#err_acc.files_size + FileSize
-        };
-    false ->
-        #err_acc{files_count = Acc#err_acc.files_count + 1}
+        {file_size, FileSize} ->
+            #err_acc{
+                files_count = Acc#err_acc.files_count + 1,
+                files_size = Acc#err_acc.files_size + FileSize
+            };
+        false ->
+            #err_acc{files_count = Acc#err_acc.files_count + 1}
     end.
 
 reduce_tree_result(Tree, R, Acc) ->
@@ -397,12 +397,12 @@ reduce_tree_result(Tree, R, Acc) ->
 read_cache() ->
     {ok, File} = get_cache_file(),
     case file:read_file_info(File) of
-    {ok, _} ->
-        {ok, Bin} = file:read_file(File),
-        Result = jiffy:decode(Bin),
-        {ok, [{keys_to_atom(E)} || {E} <- Result]};
-    {error, Reason} ->
-        {error, Reason}
+        {ok, _} ->
+            {ok, Bin} = file:read_file(File),
+            Result = jiffy:decode(Bin),
+            {ok, [{keys_to_atom(E)} || {E} <- Result]};
+        {error, Reason} ->
+            {error, Reason}
     end.
 
 write_cache(Result) ->
@@ -412,11 +412,11 @@ write_cache(Result) ->
 
 get_cache_file() ->
     case ets:lookup(opts, cache_file) of
-    [] ->
-        User = os:getenv("USER"),
-        {ok, "/tmp/cfcheck." ++ User ++ ".json"};
-    [{cache_file, File}] ->
-        {ok, File}
+        [] ->
+            User = os:getenv("USER"),
+            {ok, "/tmp/cfcheck." ++ User ++ ".json"};
+        [{cache_file, File}] ->
+            {ok, File}
     end.
 
 parse_db_file(File) ->
@@ -526,16 +526,16 @@ parse_error(false, Err) ->
     {ok, ErrInfo};
 parse_error({_, {_, File}}, Err) ->
     case file:read_file_info(File) of
-    {ok, FileInfo} ->
-        ErrInfo = [
-            {file_name, File},
-            {file_size, FileInfo#file_info.size},
-            {file_type, <<"error">>},
-            {error, list_to_binary(io_lib:format("~p", [Err]))}
-        ],
-        {ok, ErrInfo};
-    {error, Reason} ->
-        parse_error(false, Reason)
+        {ok, FileInfo} ->
+            ErrInfo = [
+                {file_name, File},
+                {file_size, FileInfo#file_info.size},
+                {file_type, <<"error">>},
+                {error, list_to_binary(io_lib:format("~p", [Err]))}
+            ],
+            {ok, ErrInfo};
+        {error, Reason} ->
+            parse_error(false, Reason)
     end.
 
 parse_view_header(Head) when is_record(Head, index_header) ->
@@ -572,10 +572,10 @@ read_header(_Fd, -1) ->
     no_valid_header;
 read_header(Fd, Pos) ->
     case (catch load_header(Fd, Pos)) of
-    {ok, Term} ->
-        {ok, Term};
-    _Error ->
-        read_header(Fd, Pos - 1)
+        {ok, Term} ->
+            {ok, Term};
+        _Error ->
+            read_header(Fd, Pos - 1)
     end.
 
 read_sec_object(_, nil) ->
@@ -691,12 +691,13 @@ load_header(Fd, Pos) ->
 
 read_term(Fd, Pos) ->
     case read_bin(Fd, Pos, 4) of
-    {<<1:1/integer, Len:31/integer>>, Next} ->
-        {<<_Md5:16/integer, Bin/binary>>, _} = read_bin(Fd, Next, Len + 16),
-        bin_to_term(Bin);
-    {<<0:1/integer, Len:31/integer>>, Next} ->
-        {Bin, _} = read_bin(Fd, Next, Len),
-        bin_to_term(Bin)
+        {<<1:1/integer, Len:31/integer>>, Next} ->
+            {<<_Md5:16/integer, Bin/binary>>, _}
+                = read_bin(Fd, Next, Len + 16),
+            bin_to_term(Bin);
+        {<<0:1/integer, Len:31/integer>>, Next} ->
+            {Bin, _} = read_bin(Fd, Next, Len),
+            bin_to_term(Bin)
     end.
 
 read_bin(Fd, Pos, Len) ->
@@ -709,12 +710,12 @@ real_len(0, FinalLen) ->
     real_len(1, FinalLen) + 1;
 real_len(Offset, Len) ->
     case ?SIZE_BLOCK - Offset of
-    Left when Left >= Len ->
-        Len;
-    Left when ((Len - Left) rem (?SIZE_BLOCK - 1)) =:= 0 ->
-        Len + ((Len - Left) div (?SIZE_BLOCK - 1));
-    Left ->
-        Len + ((Len - Left) div (?SIZE_BLOCK - 1)) + 1
+        Left when Left >= Len ->
+            Len;
+        Left when ((Len - Left) rem (?SIZE_BLOCK - 1)) =:= 0 ->
+            Len + ((Len - Left) div (?SIZE_BLOCK - 1));
+        Left ->
+            Len + ((Len - Left) div (?SIZE_BLOCK - 1)) + 1
     end.
 
 remove_prefixes(_Offset, <<>>) ->
@@ -724,11 +725,11 @@ remove_prefixes(0, <<_Prefix, Rest/binary>>) ->
 remove_prefixes(Offset, Bin) ->
     BlockBytes = ?SIZE_BLOCK - Offset,
     case size(Bin) of
-    Size when Size > BlockBytes ->
-        <<Block:BlockBytes/binary, Rest/binary>> = Bin,
-        [Block | remove_prefixes(0, Rest)];
-    _Size ->
-        [Bin]
+        Size when Size > BlockBytes ->
+            <<Block:BlockBytes/binary, Rest/binary>> = Bin,
+            [Block | remove_prefixes(0, Rest)];
+        _Size ->
+            [Bin]
     end.
 
 %% utils
@@ -772,31 +773,31 @@ keys_to_atom([{K, V}|Rest], Acc) ->
 
 get_files(Path) ->
     case filelib:is_file(Path) of
-    true ->
-        get_files([Path], []);
-    false ->
-        {error, enoent}
+        true ->
+            get_files([Path], []);
+        false ->
+            {error, enoent}
     end.
 
 get_files([], Acc) ->
     {ok, Acc};
 get_files([Path|Rest], Acc) ->
     case filelib:is_dir(Path) of
-    true ->
-        {ok, List} = file:list_dir(Path),
-        Ins = [filename:join(Path, F) || F <- List],
-        get_files(lists:append(Rest, Ins), Acc);
-    false ->
-        case lists:reverse(string:tokens(Path, ".")) of
-        ["couch", "deleted"|_] ->
-            get_files(Rest, Acc);
-        ["couch"|_] ->
-            get_files(Rest, [{db, list_to_binary(Path)}|Acc]);
-        ["view"|_] ->
-            get_files(Rest, [{view, list_to_binary(Path)}|Acc]);
-        _ ->
-            get_files(Rest, Acc)
-        end
+        true ->
+            {ok, List} = file:list_dir(Path),
+            Ins = [filename:join(Path, F) || F <- List],
+            get_files(lists:append(Rest, Ins), Acc);
+        false ->
+            case lists:reverse(string:tokens(Path, ".")) of
+            ["couch", "deleted"|_] ->
+                get_files(Rest, Acc);
+            ["couch"|_] ->
+                get_files(Rest, [{db, list_to_binary(Path)}|Acc]);
+            ["view"|_] ->
+                get_files(Rest, [{view, list_to_binary(Path)}|Acc]);
+            _ ->
+                get_files(Rest, Acc)
+            end
     end.
 
 stderr(Msg) ->
@@ -807,24 +808,25 @@ stderr(Fmt, Args) ->
 
 debug(Fmt, Args) ->
     case ets:info(opts, size) /= undefined andalso ets:lookup(opts, verbose) of
-    [{verbose, true}] -> stderr(" * " ++ Fmt, Args);
-    _ -> ok
+        [{verbose, true}] -> stderr(" * " ++ Fmt, Args);
+        _ -> ok
     end.
 
 build_progress_bar() ->
     case ets:lookup(opts, quiet) of
-    [{quiet, true}] ->
-        fun(_,_,_,_) -> ok end;
-    [{quiet, false}] ->
-        fun(Current, OkCount, ErrCount, TotalCount) ->
-            io:format(standard_error,
-                "  ~.2f% [ok: ~b; error: ~b; total: ~b]\r",
-                [100 * Current / TotalCount, OkCount, ErrCount, TotalCount])
-        end
+        [{quiet, true}] ->
+            fun(_,_,_,_) -> ok end;
+        [{quiet, false}] ->
+            fun(Current, OkCount, ErrCount, TotalCount) ->
+                io:format(standard_error,
+                    "  ~.2f% [ok: ~b; error: ~b; total: ~b]\r",
+                    [100 * Current / TotalCount,
+                    OkCount, ErrCount, TotalCount])
+            end
     end.
 
 clear_progress_bar() ->
     case ets:lookup(opts, quiet) of
-    [{quiet, true}] -> ok;
-    [{quiet, false}] -> io:format(standard_error, "~80s\r", [" "])
+        [{quiet, true}] -> ok;
+        [{quiet, false}] -> io:format(standard_error, "~80s\r", [" "])
     end.
