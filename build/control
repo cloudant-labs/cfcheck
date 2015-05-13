@@ -1,0 +1,11 @@
+Package: cfcheck
+Version: VERSION-1
+Section: misc
+Priority: optional
+Architecture: amd64
+Depends: libc6 (>= 2.18-0), erlang-base (>= 1:14.b.1)
+Maintainer: Eric Avdey <eavdey@ca.ibm.com>
+Description: Gather statistics on CouchDB files.
+ Parses all the files in the provided path and compiles
+ a report about version, active sizes and b-trees stats
+ of the files.

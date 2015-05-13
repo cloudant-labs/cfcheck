@@ -1,0 +1,73 @@
+.\" generated with Ronn/v0.7.3
+.\" http://github.com/rtomayko/ronn/tree/0.7.3
+.
+.TH "CFCHECK" "1" "May 2015" "" ""
+.
+.SH "NAME"
+\fBcfcheck\fR \- Gather statistics on CouchDB files
+.
+.SH "SYNOPSIS"
+\fBcfcheck\fR \fIpath\fR [\fIopt\fR\.\.\.]
+.
+.SH "DESCRIPTION"
+\fBCFCheck\fR is a tool to analyze DBCore and CouchDB 2\.0 database and view files\. It recursively scans provided path to CouchDB installation, collects all the files with \fB\.couch\fR and \fB\.view\fR extention and then reads each of them, locating and parsing latest header and optionally walking the b\-trees\. To speed the things up cfcheck spawns a process per file and then aggregates the results\. It does not depends on CouchDB to be up and running\.
+.
+.P
+The tool uses JSON to output the information for possible post\-processing\.
+.
+.SH "FILES"
+The \fBcfcheck\fR command expects input to be a complete path to data directory of CouchDB\.
+.
+.SH "OPTIONS"
+These options control what kind of statistics the utility gathers and output\.
+.
+.IP "\(bu" 4
+\fB\-d\fR, \fB\-\-details\fR: Output the details for each file\.
+.
+.IP "\(bu" 4
+\fB\-c\fR, \fB\-\-cache\fR: Read the results from a cache\.
+.
+.IP "\(bu" 4
+\fB\-\-cache_file\fR: Path to the cache file
+.
+.IP "\(bu" 4
+\fB\-\-regex\fR: Filter\-in the files to parse with a given regex
+.
+.IP "\(bu" 4
+\fB\-\-conflicts\fR: Count conflicts
+.
+.IP "\(bu" 4
+\fB\-\-with_tree\fR: Analyze b\-trees
+.
+.IP "\(bu" 4
+\fB\-\-with_sec_object\fR: Read and report security object from each shard
+.
+.IP "\(bu" 4
+\fB\-q\fR, \fB\-\-quiet\fR: Output nothing
+.
+.IP "\(bu" 4
+\fB\-v\fR, \fB\-\-verbose\fR: Verbose output
+.
+.IP "\(bu" 4
+\fB\-?\fR, \fB\-\-help\fR Print help message
+.
+.IP "" 0
+.
+.SH "EXAMPLES"
+Parse all the files including stats on b\-trees and documents conflicts\.
+.
+.IP "" 4
+.
+.nf
+
+$ cfcheck ~/opt/deimos/ \-\-with_tree \-\-conflicts
+.
+.fi
+.
+.IP "" 0
+.
+.SH "COPYRIGHT"
+Copyright IBM Corp\. 2015
+.
+.SH "SEE ALSO"
+couchdb(1)

@@ -6,6 +6,7 @@ priv
 *.o
 *.beam
 *.plt
+*.deb
 erl_crash.dump
 ebin
 rel/cfcheck

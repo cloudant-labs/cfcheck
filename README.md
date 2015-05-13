@@ -247,6 +247,16 @@ The script always caches the results of the run in a plain json file. This is do
 
 By default the cache file stored at `/tmp/cfcheck.[$USERNAME].json`. The file suffixed with the user name to avoid permissions clash in case the script ran on the same host by different users. The path to the cache file could be overriden with `--cache_file` option.
 
+## Packaging
+
+Makefile's target `make package` generates debian's binary package for the script. For now it installs the main script in `/usr/bin` and libs in `/usr/lib/cfcheck` with symlink to `/usr/priv` to satisfy erlang nif's search path.
+
+The make target expects [dch](http://man.he.net/man1/dch), [dpkg-deb](http://man.he.net/man1/dpkg-deb) and [fakeroot](http://man.he.net/man1/fakeroot) to be available on a build host.
+
+Makefile's target `make lint-package` lints the built package with [lintian](http://man.he.net/man1/lintian)
+
+cfcheck (1) man page for the script included in */man* directory in markdown and roff formats. If necessary, it could be updated in markdown and rebuilt to roff with makefile's target `make man`. [ronn](https://rtomayko.github.io/ronn/ronn.1.html) is required to be available on a build host.
+
 ## License
 
 [Apache 2.0](https://github.com/cloudant/cfcheck/blob/master/LICENSE.txt)
