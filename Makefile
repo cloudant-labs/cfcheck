@@ -15,6 +15,8 @@ export DEBEMAIL := $(shell git log --pretty --format="%ce" -1 $(VERSION))
 PACKAGE := "cfcheck_$(VERSION)-1_amd64.deb"
 
 DEPS = getopt jiffy snappy
+dep_getopt = git https://github.com/jcomellas/getopt master
+dep_jiffy = git https://github.com/davisp/jiffy master
 dep_snappy = git https://github.com/fdmanana/snappy-erlang-nif master
 
 ESCRIPT_EMU_ARGS ?= -pa . \
