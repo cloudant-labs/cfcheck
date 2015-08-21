@@ -8,7 +8,11 @@ SEMVER := $(shell git describe --tags --long --dirty --always | \
 VERSION_MAJOR := $(word 1, $(SEMVER))
 VERSION_MINOR := $(word 2, $(SEMVER))
 VERSION_PATCH := $(word 3, $(SEMVER))
+ifeq ($(strip $(VERSION_MINOR)),)
+VERSION := $(shell git describe --tags --long --always)
+else
 VERSION := "$(VERSION_MAJOR).$(VERSION_MINOR).$(VERSION_PATCH)"
+endif
 export DEBFULLNAME := $(shell git log --pretty --format="%cn" -1 $(VERSION))
 export DEBEMAIL := $(shell git log --pretty --format="%ce" -1 $(VERSION))
 
