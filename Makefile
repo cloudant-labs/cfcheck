@@ -8,13 +8,19 @@ SEMVER := $(shell git describe --tags --long --dirty --always | \
 VERSION_MAJOR := $(word 1, $(SEMVER))
 VERSION_MINOR := $(word 2, $(SEMVER))
 VERSION_PATCH := $(word 3, $(SEMVER))
+ifeq ($(strip $(VERSION_MINOR)),)
+VERSION := $(shell git describe --tags --long --always)
+else
 VERSION := "$(VERSION_MAJOR).$(VERSION_MINOR).$(VERSION_PATCH)"
+endif
 export DEBFULLNAME := $(shell git log --pretty --format="%cn" -1 $(VERSION))
 export DEBEMAIL := $(shell git log --pretty --format="%ce" -1 $(VERSION))
 
 PACKAGE := "cfcheck_$(VERSION)-1_amd64.deb"
 
 DEPS = getopt jiffy snappy
+dep_getopt = git https://github.com/jcomellas/getopt master
+dep_jiffy = git https://github.com/davisp/jiffy master
 dep_snappy = git https://github.com/fdmanana/snappy-erlang-nif master
 
 ESCRIPT_EMU_ARGS ?= -pa . \
@@ -30,6 +36,12 @@ escript::
 	@mkdir -p $(PWD)/priv
 	@cp $(PWD)/deps/snappy/priv/snappy_nif.so $(PWD)/priv
 	@cp $(PWD)/deps/jiffy/priv/jiffy.so $(PWD)/priv
+
+clean::
+	@rm -rf $(PWD)/priv
+
+distclean::
+	@rm -rf $(PWD)/priv
 
 package:
 	@if test -d $(BUILD_ROOT); then rm -rf $(BUILD_ROOT); fi
