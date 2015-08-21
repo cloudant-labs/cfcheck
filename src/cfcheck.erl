@@ -686,7 +686,7 @@ load_header(Fd, Pos) ->
     <<Md5:16/binary, HeaderBin/binary>> =
         iolist_to_binary(remove_prefixes(5, RawBin)),
     %% make it to jump header back if md5 not match
-    Md5 = crypto:md5(HeaderBin),
+    Md5 = md5(HeaderBin),
     {ok, bin_to_term(HeaderBin)}.
 
 read_term(Fd, Pos) ->
@@ -759,6 +759,12 @@ to_digit(N) -> $a + N-10.
 
 keys_to_atom(List) ->
     keys_to_atom(List, []).
+
+md5(Data) ->
+    case erlang:function_exported(crypto, hash, 2) of
+        true -> crypto:hash(md5, Data);
+        false -> crypto:md5(Data)
+    end.
 
 %% I know it's a bad thing to do in general,
 %% but shouldn't be deadly sin in a script. I hope.

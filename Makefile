@@ -23,6 +23,10 @@ dep_getopt = git https://github.com/jcomellas/getopt master
 dep_jiffy = git https://github.com/davisp/jiffy master
 dep_snappy = git https://github.com/fdmanana/snappy-erlang-nif master
 
+ERLC_OPTS = -Werror +nowarn_deprecated_function \
+	+warn_export_vars +warn_shadow_vars \
+	+warn_obsolete_guard
+
 ESCRIPT_EMU_ARGS ?= -pa . \
 	-sasl false \
 	-kernel error_logger silent \
