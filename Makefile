@@ -37,6 +37,12 @@ escript::
 	@cp $(PWD)/deps/snappy/priv/snappy_nif.so $(PWD)/priv
 	@cp $(PWD)/deps/jiffy/priv/jiffy.so $(PWD)/priv
 
+clean::
+	@rm -rf $(PWD)/priv
+
+distclean::
+	@rm -rf $(PWD)/priv
+
 package:
 	@if test -d $(BUILD_ROOT); then rm -rf $(BUILD_ROOT); fi
 	@mkdir -p $(BUILD_ROOT)/DEBIAN
