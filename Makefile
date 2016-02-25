@@ -1,6 +1,5 @@
 .PHONY: package lint-package man
 
-PROJECT = cfcheck
 BUILD_ROOT := $(PWD)/debian
 BUILD := $(BUILD_ROOT)/usr
 SEMVER := $(shell git describe --tags --long --dirty --always | \
@@ -18,36 +17,34 @@ export DEBEMAIL := $(shell git log --pretty --format="%ce" -1 $(VERSION))
 
 PACKAGE := "cfcheck_$(VERSION)-1_amd64.deb"
 
-DEPS = getopt jiffy snappy
-dep_getopt = git https://github.com/jcomellas/getopt master
-dep_jiffy = git https://github.com/davisp/jiffy master
-dep_snappy = git https://github.com/fdmanana/snappy-erlang-nif master
+all: compile escript
 
-ERLC_OPTS = -Werror +nowarn_deprecated_function \
-	+warn_export_vars +warn_shadow_vars \
-	+warn_obsolete_guard
+dev: compile-dev escript
 
-ESCRIPT_EMU_ARGS ?= -pa . \
-	-sasl false \
-	-kernel error_logger silent \
-	-escript main $(ESCRIPT_NAME)
+get-deps:
+	@rebar get-deps
 
-include erlang.mk
+compile: get-deps
+	@rebar compile
 
-all:: escript
+compile-dev:
+	@rebar compile skip_deps=true
 
-escript::
+escript:
+	@rebar escriptize
+
+clean:
+	@rebar clean
+
+distclean:
+	@rebar -r clean
+
+move-libs:
 	@mkdir -p $(PWD)/priv
 	@cp $(PWD)/deps/snappy/priv/snappy_nif.so $(PWD)/priv
 	@cp $(PWD)/deps/jiffy/priv/jiffy.so $(PWD)/priv
 
-clean::
-	@rm -rf $(PWD)/priv
-
-distclean::
-	@rm -rf $(PWD)/priv
-
-package:
+package: move-libs
 	@if test -d $(BUILD_ROOT); then rm -rf $(BUILD_ROOT); fi
 	@mkdir -p $(BUILD_ROOT)/DEBIAN
 	@mkdir -p $(BUILD)/bin
