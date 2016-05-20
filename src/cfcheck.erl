@@ -452,8 +452,8 @@ parse_db_file(File) ->
     {ok, SeqTree} = read_tree(Header#db_header.seq_tree_state),
     {ok, LocTree} = read_tree(Header#db_header.local_tree_state),
     ActiveSize = proplists:get_value(active_size, IdTree, 0)
-        + proplists:get_value(size, IdTree) 
-        + proplists:get_value(size, SeqTree) 
+        + proplists:get_value(size, IdTree)
+        + proplists:get_value(size, SeqTree)
         + proplists:get_value(size, LocTree),
     Fragmentation = list_to_binary(io_lib:format("~.2f%",
         [(FileSize - ActiveSize) / FileSize * 100])),
