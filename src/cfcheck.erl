@@ -424,6 +424,7 @@ parse_db_file(File) ->
     {ok, Fd} = file:open(File, [read, binary]),
     Pos = (FileSize div ?SIZE_BLOCK) * ?SIZE_BLOCK,
     {ok, Header} = read_header(Fd, Pos),
+    debug_record(Header),
     {ok, SecObj} = case ets:lookup(opts, with_sec_object) of
         [{with_sec_object, true}] ->
             read_sec_object(Fd, Header#db_header.security_ptr);
@@ -480,6 +481,7 @@ parse_view_file(File) ->
     {ok, Fd} = file:open(File, [read, binary]),
     Pos = (FileSize div ?SIZE_BLOCK) * ?SIZE_BLOCK,
     {ok, {Sig, HeaderRec}} = read_header(Fd, Pos),
+    debug_record(HeaderRec),
     {ok, Header} = parse_view_header(HeaderRec),
     {ok, TreesInfo} = case ets:lookup(opts, with_tree) of
         [{with_tree, true}] ->
@@ -817,6 +819,19 @@ debug(Fmt, Args) ->
         [{verbose, true}] -> stderr(" * " ++ Fmt, Args);
         _ -> ok
     end.
+
+debug_record(Rec) ->
+    RecType = element(1, Rec),
+    FieldsFun = fun
+        (db_header) -> record_info(fields, db_header);
+        (index_header) -> record_info(fields, index_header);
+        (mrheader) -> record_info(fields, mrheader)
+    end,
+    Fields = FieldsFun(RecType),
+    Elements = lists:zipwith(fun(Key, Value) ->
+        io_lib:format("     ~s = ~w~n", [Key, Value])
+    end, Fields, tl(tuple_to_list(Rec))),
+    debug("#~s {~n~s   }", [RecType, Elements]).
 
 build_progress_bar() ->
     case ets:lookup(opts, quiet) of
