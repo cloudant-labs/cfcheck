@@ -815,8 +815,8 @@ stderr(Fmt, Args) ->
     io:format(standard_error, Fmt ++ "~n", Args).
 
 debug(Fmt, Args) ->
-    case ets:info(opts, size) /= undefined andalso ets:lookup(opts, verbose) of
-        [{verbose, true}] -> stderr(" * " ++ Fmt, Args);
+    case is_verbose() of
+        true -> stderr(" * " ++ Fmt, Args);
         _ -> ok
     end.
 
@@ -834,20 +834,32 @@ debug_record(Rec) ->
     debug("#~s {~n~s   }", [RecType, Elements]).
 
 build_progress_bar() ->
-    case ets:lookup(opts, quiet) of
-        [{quiet, true}] ->
-            fun(_,_,_,_) -> ok end;
-        [{quiet, false}] ->
+    case {is_quiet(), is_verbose()} of
+        {false, false} ->
             fun(Current, OkCount, ErrCount, TotalCount) ->
                 io:format(standard_error,
                     "  ~.2f% [ok: ~b; error: ~b; total: ~b]\r",
                     [100 * Current / TotalCount,
                     OkCount, ErrCount, TotalCount])
-            end
+            end;
+        _ ->
+            fun(_,_,_,_) -> ok end
     end.
 
 clear_progress_bar() ->
-    case ets:lookup(opts, quiet) of
-        [{quiet, true}] -> ok;
-        [{quiet, false}] -> io:format(standard_error, "~80s\r", [" "])
+    case {is_quiet(), is_verbose()} of
+        {false, false} -> io:format(standard_error, "~80s\r", [" "]);
+        _ -> ok
+    end.
+
+is_verbose() ->
+    is_opt_on(verbose).
+
+is_quiet() ->
+    is_opt_on(quiet).
+
+is_opt_on(OptName) ->
+    case ets:info(opts, size) /= undefined andalso ets:lookup(opts, OptName) of
+        [{OptName, true}] -> true;
+        _ -> false
     end.
