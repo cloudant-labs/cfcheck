@@ -519,6 +519,7 @@ parse_view_file(File) ->
     {ok, FileInfo}.
 
 parse_error(false, Err) ->
+    debug("error ~p", [Err]),
     ErrInfo = [
         {file_name, <<"unknown">>},
         {file_size, 0},
@@ -527,6 +528,7 @@ parse_error(false, Err) ->
     ],
     {ok, ErrInfo};
 parse_error({_, {_, File}}, Err) ->
+    debug("error in file ~s~n   ~p", [File, Err]),
     case file:read_file_info(File) of
         {ok, FileInfo} ->
             ErrInfo = [
