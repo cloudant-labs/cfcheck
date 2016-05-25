@@ -424,6 +424,7 @@ parse_db_file(File) ->
     {ok, Fd} = file:open(File, [read, binary]),
     Pos = (FileSize div ?SIZE_BLOCK) * ?SIZE_BLOCK,
     {ok, Header} = read_header(Fd, Pos),
+    debug_record(Header),
     {ok, SecObj} = case ets:lookup(opts, with_sec_object) of
         [{with_sec_object, true}] ->
             read_sec_object(Fd, Header#db_header.security_ptr);
@@ -451,8 +452,8 @@ parse_db_file(File) ->
     {ok, SeqTree} = read_tree(Header#db_header.seq_tree_state),
     {ok, LocTree} = read_tree(Header#db_header.local_tree_state),
     ActiveSize = proplists:get_value(active_size, IdTree, 0)
-        + proplists:get_value(size, IdTree) 
-        + proplists:get_value(size, SeqTree) 
+        + proplists:get_value(size, IdTree)
+        + proplists:get_value(size, SeqTree)
         + proplists:get_value(size, LocTree),
     Fragmentation = list_to_binary(io_lib:format("~.2f%",
         [(FileSize - ActiveSize) / FileSize * 100])),
@@ -480,6 +481,7 @@ parse_view_file(File) ->
     {ok, Fd} = file:open(File, [read, binary]),
     Pos = (FileSize div ?SIZE_BLOCK) * ?SIZE_BLOCK,
     {ok, {Sig, HeaderRec}} = read_header(Fd, Pos),
+    debug_record(HeaderRec),
     {ok, Header} = parse_view_header(HeaderRec),
     {ok, TreesInfo} = case ets:lookup(opts, with_tree) of
         [{with_tree, true}] ->
@@ -517,6 +519,7 @@ parse_view_file(File) ->
     {ok, FileInfo}.
 
 parse_error(false, Err) ->
+    debug("error ~p", [Err]),
     ErrInfo = [
         {file_name, <<"unknown">>},
         {file_size, 0},
@@ -525,6 +528,7 @@ parse_error(false, Err) ->
     ],
     {ok, ErrInfo};
 parse_error({_, {_, File}}, Err) ->
+    debug("error in file ~s~n   ~p", [File, Err]),
     case file:read_file_info(File) of
         {ok, FileInfo} ->
             ErrInfo = [
@@ -813,26 +817,51 @@ stderr(Fmt, Args) ->
     io:format(standard_error, Fmt ++ "~n", Args).
 
 debug(Fmt, Args) ->
-    case ets:info(opts, size) /= undefined andalso ets:lookup(opts, verbose) of
-        [{verbose, true}] -> stderr(" * " ++ Fmt, Args);
+    case is_verbose() of
+        true -> stderr(" * " ++ Fmt, Args);
         _ -> ok
     end.
 
+debug_record(Rec) ->
+    RecType = element(1, Rec),
+    FieldsFun = fun
+        (db_header) -> record_info(fields, db_header);
+        (index_header) -> record_info(fields, index_header);
+        (mrheader) -> record_info(fields, mrheader)
+    end,
+    Fields = FieldsFun(RecType),
+    Elements = lists:zipwith(fun(Key, Value) ->
+        io_lib:format("     ~s = ~w~n", [Key, Value])
+    end, Fields, tl(tuple_to_list(Rec))),
+    debug("#~s {~n~s   }", [RecType, Elements]).
+
 build_progress_bar() ->
-    case ets:lookup(opts, quiet) of
-        [{quiet, true}] ->
-            fun(_,_,_,_) -> ok end;
-        [{quiet, false}] ->
+    case {is_quiet(), is_verbose()} of
+        {false, false} ->
             fun(Current, OkCount, ErrCount, TotalCount) ->
                 io:format(standard_error,
                     "  ~.2f% [ok: ~b; error: ~b; total: ~b]\r",
                     [100 * Current / TotalCount,
                     OkCount, ErrCount, TotalCount])
-            end
+            end;
+        _ ->
+            fun(_,_,_,_) -> ok end
     end.
 
 clear_progress_bar() ->
-    case ets:lookup(opts, quiet) of
-        [{quiet, true}] -> ok;
-        [{quiet, false}] -> io:format(standard_error, "~80s\r", [" "])
+    case {is_quiet(), is_verbose()} of
+        {false, false} -> io:format(standard_error, "~80s\r", [" "]);
+        _ -> ok
+    end.
+
+is_verbose() ->
+    is_opt_on(verbose).
+
+is_quiet() ->
+    is_opt_on(quiet).
+
+is_opt_on(OptName) ->
+    case ets:info(opts, size) /= undefined andalso ets:lookup(opts, OptName) of
+        [{OptName, true}] -> true;
+        _ -> false
     end.
