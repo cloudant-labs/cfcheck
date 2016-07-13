@@ -572,14 +572,14 @@ parse_view_header(Head) ->
 
 %% readers
 
-read_header(_Fd, -1) ->
+read_header(_Fd, Pos) when Pos < 0 ->
     no_valid_header;
 read_header(Fd, Pos) ->
     case (catch load_header(Fd, Pos)) of
         {ok, Term} ->
             {ok, Term};
         _Error ->
-            read_header(Fd, Pos - 1)
+            read_header(Fd, Pos - ?SIZE_BLOCK)
     end.
 
 read_sec_object(_, nil) ->
