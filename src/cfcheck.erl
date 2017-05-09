@@ -56,37 +56,13 @@
     doc_info_count = 0,
     purged_doc_count = 0,
     conflicts = 0,
-    disk_version = dict:new(),
-    tree_stats = {[
-        {id_tree, {[
-            {depth, 0},
-            {kp_nodes, {[{min, 0}, {max, 0}]}},
-            {kv_nodes, {[{min, 0}, {max, 0}]}}
-        ]}},
-        {seq_tree, {[
-            {depth, 0},
-            {kp_nodes, {[{min, 0}, {max, 0}]}},
-            {kv_nodes, {[{min, 0}, {max, 0}]}}
-        ]}},
-        {local_tree, {[
-            {depth, 0},
-            {kp_nodes, {[{min, 0}, {max, 0}]}},
-            {kv_nodes, {[{min, 0}, {max, 0}]}}
-        ]}}
-    ]}
+    disk_version = dict:new()
 }).
 -record(view_acc, {
     files_count = 0,
     files_size = 0,
     active_size = 0,
-    external_size = 0,
-    tree_stats = {[
-        {id_tree, {[
-            {depth, 0},
-            {kp_nodes, {[{min, 0}, {max, 0}]}},
-            {kv_nodes, {[{min, 0}, {max, 0}]}}
-        ]}}
-    ]}
+    external_size = 0
 }).
 -record(err_acc, {
     files_count = 0,
@@ -105,7 +81,8 @@
 -define(TIMEOUT, 30000).
 -define(OPTS, [
     {path, undefined, undefined, string, "Path to CouchDB data directory"},
-    {details, $d, "details", boolean, "Output the details for each file"},
+    {details, $d, "details", {boolean, false},
+        "Output the details for each file"},
     {cache, $c, "cache", {boolean, false}, "Read the results from a cache"},
     {cache_file, undefined, "cache_file", string, "Path to the cache file"},
     {regex, undefined, "regex", string,
@@ -253,7 +230,14 @@ process_file(CollectorPid, FD) ->
 process_result(Result) ->
     case ets:lookup(opts, details) of
         [{details, true}] ->
-            io:format("~s~n", [jiffy:encode(Result)]);
+            case ets:lookup(opts, with_tree) of
+                [{with_tree, true}] ->
+                    io:format("~s~n", [jiffy:encode(Result)]);
+                [{with_tree, false}] ->
+                    [{Result0}] = Result,
+                    Result1 = lists:keydelete(tree_info, 1, Result0),
+                    io:format("~s~n", [jiffy:encode([{Result1}])])
+            end;
         _ ->
             {DRec, VRec, ERec} = lists:foldl(fun reduce_result/2,
                 {#db_acc{}, #view_acc{}, #err_acc{}}, Result),
@@ -271,20 +255,11 @@ process_result(Result) ->
             end,
             View = ?r2l(view_acc, VRec),
             Err = ?r2l(err_acc, ERec),
-            Stats = case ets:lookup(opts, with_tree) of
-                [{with_tree, true}] ->
-                    {[
-                        {db, {Db2}},
-                        {view, {View}},
-                        {error, {Err}}
-                    ]};
-                [{with_tree, false}] ->
-                    {[
-                        {db, {lists:keydelete(tree_stats, 1, Db2)}},
-                        {view, {lists:keydelete(tree_stats, 1, View)}},
-                        {error, {Err}}
-                    ]}
-            end,
+            Stats = {[
+                {db, {Db2}},
+                {view, {View}},
+                {error, {Err}}
+            ]},
             io:format("~s~n", [jiffy:encode(Stats)])
     end.
 
@@ -308,18 +283,6 @@ reduce_db_result(R, Acc) ->
     {purged_doc_count, PurgeDocCount} = lists:keyfind(purged_doc_count, 1, R),
     {conflicts, Conflicts} = lists:keyfind(conflicts, 1, R),
     {disk_version, DVer} = lists:keyfind(disk_version, 1, R),
-    TreeStats = case ets:lookup(opts, with_tree) of
-        [{with_tree, true}] ->
-            {TreeAcc} = Acc#db_acc.tree_stats,
-            {[
-                {id_tree, reduce_tree_result(id_tree, R, TreeAcc)},
-                {seq_tree, reduce_tree_result(seq_tree, R, TreeAcc)},
-                {local_tree, reduce_tree_result(local_tree, R, TreeAcc)}
-            ]};
-        [{with_tree, false}] ->
-            DefAcc = #db_acc{},
-            DefAcc#db_acc.tree_stats
-    end,
     #db_acc{
         files_count = Acc#db_acc.files_count + 1,
         files_size = Acc#db_acc.files_size + FileSize,
@@ -330,28 +293,18 @@ reduce_db_result(R, Acc) ->
         doc_info_count = Acc#db_acc.doc_info_count + DocInfoCount,
         purged_doc_count = Acc#db_acc.purged_doc_count + PurgeDocCount,
         conflicts = Acc#db_acc.conflicts + Conflicts,
-        disk_version = dict:update_counter(DVer, 1, Acc#db_acc.disk_version),
-        tree_stats = TreeStats
+        disk_version = dict:update_counter(DVer, 1, Acc#db_acc.disk_version)
     }.
 
 reduce_view_result(R, Acc) ->
     {file_size, FileSize} = lists:keyfind(file_size, 1, R),
     {active_size, ActiveSize} = lists:keyfind(active_size, 1, R),
     {external_size, ExternalSize} = lists:keyfind(external_size, 1, R),
-    TreeStats = case ets:lookup(opts, with_tree) of
-        [{with_tree, true}] ->
-            {TreeAcc} = Acc#view_acc.tree_stats,
-            {[{id_tree, reduce_tree_result(id_tree, R, TreeAcc)}]};
-        [{with_tree, false}] ->
-            DefAcc = #view_acc{},
-            DefAcc#view_acc.tree_stats
-    end,
     #view_acc{
         files_count = Acc#view_acc.files_count + 1,
         files_size = Acc#view_acc.files_size + FileSize,
         active_size = Acc#view_acc.active_size + ActiveSize,
-        external_size = Acc#view_acc.external_size + ExternalSize,
-        tree_stats = TreeStats
+        external_size = Acc#view_acc.external_size + ExternalSize
     }.
 
 reduce_error_result(R, Acc) ->
@@ -364,35 +317,6 @@ reduce_error_result(R, Acc) ->
         false ->
             #err_acc{files_count = Acc#err_acc.files_count + 1}
     end.
-
-reduce_tree_result(Tree, R, Acc) ->
-    {Tree, {TreeInfo1}} = lists:keyfind(Tree, 1, Acc),
-    {Tree, {TreeInfo2}} = lists:keyfind(Tree, 1, R),
-    {depth, D1} = lists:keyfind(depth, 1, TreeInfo1),
-    {kp_nodes, {KP1}} = lists:keyfind(kp_nodes, 1, TreeInfo1),
-    {min, KPMin1} = lists:keyfind(min, 1, KP1),
-    {max, KPMax1} = lists:keyfind(max, 1, KP1),
-    {kv_nodes, {KV1}} = lists:keyfind(kv_nodes, 1, TreeInfo1),
-    {min, KVMin1} = lists:keyfind(min, 1, KV1),
-    {max, KVMax1} = lists:keyfind(max, 1, KV1),
-    {depth, D2} = lists:keyfind(depth, 1, TreeInfo2),
-    {kp_nodes, {KP2}} = lists:keyfind(kp_nodes, 1, TreeInfo2),
-    {min, KPMin2} = lists:keyfind(min, 1, KP2),
-    {max, KPMax2} = lists:keyfind(max, 1, KP2),
-    {kv_nodes, {KV2}} = lists:keyfind(kv_nodes, 1, TreeInfo2),
-    {min, KVMin2} = lists:keyfind(min, 1, KV2),
-    {max, KVMax2} = lists:keyfind(max, 1, KV2),
-    {[
-        {depth, erlang:max(D1, D2)},
-        {kp_nodes, {[
-            {min, erlang:min(KPMin1, KPMin2)},
-            {max, erlang:max(KPMax1, KPMax2)}
-        ]}},
-        {kv_nodes, {[
-            {min, erlang:min(KVMin1, KVMin2)},
-            {max, erlang:max(KVMax1, KVMax2)}
-        ]}}
-    ]}.
 
 read_cache() ->
     {ok, File} = get_cache_file(),
@@ -431,14 +355,16 @@ parse_db_file(File) ->
         _ ->
             {ok, []}
     end,
-    {ok, TreesInfo} = case ets:lookup(opts, with_tree) of
-        [{with_tree, true}] ->
+    [{details, WithDetails}] = ets:lookup(opts, details),
+    [{with_tree, WithTree}] = ets:lookup(opts, with_tree),
+    {ok, TreesInfo} = case WithDetails andalso WithTree of
+        true ->
             analyze_trees(Fd, [
                 {id_tree, Header#db_header.id_tree_state},
                 {seq_tree, Header#db_header.seq_tree_state},
                 {local_tree, Header#db_header.local_tree_state}
             ]);
-        [{with_tree, false}] ->
+        false ->
             {ok, []}
     end,
     {ok, Conflicts} = case ets:lookup(opts, conflicts) of
@@ -472,8 +398,9 @@ parse_db_file(File) ->
         {del_doc_count, proplists:get_value(del_doc_count, IdTree, 0)},
         {doc_info_count, proplists:get_value(doc_info_count, SeqTree, 0)},
         {purged_doc_count, as_int(Header#db_header.purged_docs)},
-        {conflicts, Conflicts}
-    ] ++ SecObj ++ TreesInfo,
+        {conflicts, Conflicts},
+        {tree_info, TreesInfo}
+    ] ++ SecObj,
     {ok, FileInfo}.
 
 parse_view_file(File) ->
@@ -515,7 +442,9 @@ parse_view_file(File) ->
         {purge_seq, as_int(dict:fetch(purge_seq, Header))},
         {active_size, ActiveSize},
         {external_size, ExternalSize},
-        {fragmentation, Fragmentation}] ++ TreesInfo,
+        {fragmentation, Fragmentation},
+        {tree_info, TreesInfo}
+    ],
     {ok, FileInfo}.
 
 parse_error(false, Err) ->
@@ -608,7 +537,7 @@ read_tree({_Pos, [], Size}) ->
 analyze_trees(Fd, Trees) ->
     Info = lists:map(fun({Key, Tree}) ->
         {ok, Info} = analyze_tree(Fd, Tree),
-        {Key, {Info}}
+        {[{Key, {Info}}]}
     end, Trees),
     {ok, Info}.
 
