@@ -412,7 +412,12 @@ parse_view_file(File) ->
     {ok, Header} = parse_view_header(HeaderRec),
     {ok, TreesInfo} = case ets:lookup(opts, with_tree) of
         [{with_tree, true}] ->
-            analyze_trees(Fd, [{id_tree, dict:fetch(id_tree, Header)}]);
+            IdTreeState = dict:fetch(id_tree, Header),
+            ViewStates = lists:map(fun
+                ({ViewTState, _, _, _, _}) -> {view_tree, ViewTState};
+                ({TPos, Reds, Size}) -> {view_tree, {TPos, Reds, Size}}
+            end, dict:fetch(views, Header)),
+            analyze_trees(Fd, [{id_tree, IdTreeState}] ++ ViewStates);
         [{with_tree, false}] ->
             {ok, []}
     end,
