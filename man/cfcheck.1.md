@@ -7,7 +7,7 @@ cfcheck(1) -- Gather statistics on CouchDB files
 
 ## DESCRIPTION
 
-**CFCheck** is a tool to analyze DBCore and CouchDB 2.0 database and view files. It recursively scans provided path to CouchDB installation, collects all the files with `.couch` and `.view` extention and then reads each of them, locating and parsing latest header and optionally walking the b-trees. To speed the things up cfcheck spawns a process per file and then aggregates the results. It does not depends on CouchDB to be up and running.
+**CFCheck** is a tool to analyze CouchDB 2.0 database and view files. It recursively scans provided path to CouchDB installation, collects all the files with `.couch` and `.view` extention and then reads each of them, locating and parsing latest header and optionally walking the b-trees. To speed the things up cfcheck spawns a process per file and then aggregates the results. It does not depends on CouchDB to be up and running.
 
 The tool uses JSON to output the information for possible post-processing.
 
