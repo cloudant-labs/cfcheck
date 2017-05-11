@@ -61,7 +61,7 @@ package: move-libs
 	@cp $(PWD)/man/cfcheck.1 $(BUILD)/share/man/man1
 	@gzip --best $(BUILD)/share/man/man1/cfcheck.1
 	@echo "Files: $(BUILD)/bin/cfcheck" > $(BUILD)/share/doc/cfcheck/copyright
-	@echo "Copyright: 2015 IBM Corporation" >> $(BUILD)/share/doc/cfcheck/copyright
+	@echo "Copyright: 2017 IBM Corporation" >> $(BUILD)/share/doc/cfcheck/copyright
 	@echo "License: Apache-2.0]\n On Debian systems the full text of the Apache-2.0 license can be found in the\n '/usr/share/common-licenses/Apache-2.0' file." >> $(BUILD)/share/doc/cfcheck/copyright
 	@dch --create --package cfcheck --newversion $(VERSION) --urgency low --changelog $(BUILD)/share/doc/cfcheck/changelog Initial commit
 	@git log --reverse --format="%s" 0fbb9f3..$(VERSION) | xargs -L 1 dch -i --changelog $(BUILD)/share/doc/cfcheck/changelog

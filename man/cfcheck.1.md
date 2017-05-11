@@ -58,7 +58,7 @@ Parse all the files including stats on b-trees and documents conflicts.
 
 ## COPYRIGHT
 
-Copyright IBM Corp. 2015
+Copyright IBM Corp. 2017
 
 ## SEE ALSO
 
